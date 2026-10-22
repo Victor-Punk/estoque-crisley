@@ -35,6 +35,7 @@ button.s{padding:7px 10px;font-size:14px}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom,0px)}
 nav button{flex:1;border:0;border-radius:0;background:transparent;padding:15px 4px;color:var(--mut)}
 nav button.on{color:var(--ac);font-weight:700}
+summary{cursor:pointer;padding:6px 0}
 #msg{position:fixed;left:16px;right:16px;bottom:calc(70px + env(safe-area-inset-bottom,0px));display:none;background:var(--tx);color:var(--bg);padding:10px 14px;border-radius:10px;text-align:center;z-index:5}
 </style>
 </head>
@@ -108,9 +109,15 @@ nav button.on{color:var(--ac);font-weight:700}
 <div id="low"></div>
 <h2>Backup</h2>
 <div class="card">
-<p class="mut" style="margin-top:0">Os dados ficam só neste aparelho. Toque em “Gerar backup”, copie o texto e mande para você mesma no WhatsApp. Para restaurar, cole o texto aqui e toque em “Restaurar”.</p>
-<textarea id="bk" rows="5" placeholder="O backup aparece aqui"></textarea>
-<div class="row" style="margin-top:8px"><button id="gen">Gerar backup</button><button id="cp">Copiar</button><button id="rs">Restaurar</button></div>
+<p class="mut" style="margin-top:0">Os dados ficam só neste aparelho. Toque em “Baixar backup” e mande o arquivo para você mesma no WhatsApp.</p>
+<button class="p full" id="dl" style="margin-top:0">Baixar backup</button>
+<label for="bf">Restaurar a partir de um arquivo</label>
+<input id="bf" type="file" accept=".txt,.json,text/plain,application/json">
+<button class="full" id="rs">Restaurar</button>
+<details style="margin-top:14px"><summary class="mut">Usar texto copiado</summary>
+<textarea id="bk" rows="5" placeholder="O backup aparece aqui" style="margin-top:8px"></textarea>
+<div class="row" style="margin-top:8px"><button id="gen">Gerar backup</button><button id="cp">Copiar</button></div>
+</details>
 </div>
 </section>
 </main>
@@ -264,6 +271,21 @@ document.addEventListener('click',e=>{
   }
 });
 
+$('dl').onclick=()=>{
+  const d=new Date(),z=n=>String(n).padStart(2,'0');
+  const nome='backup-estoque-'+d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'.txt';
+  try{
+    const u=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'text/plain'}));
+    const a=document.createElement('a');a.href=u;a.download=nome;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),2000);
+    toast('Backup baixado. No iPhone, ele fica no app Arquivos.');
+  }catch(e){toast('Não foi possível baixar. Use o texto copiado.')}
+};
+$('bf').onchange=async()=>{
+  const f=$('bf').files[0];if(!f)return;
+  try{$('bk').value=await f.text();rest=false;$('rs').textContent='Restaurar';toast('Arquivo carregado. Toque em Restaurar.')}
+  catch(e){toast('Não foi possível ler o arquivo.')}
+};
 $('gen').onclick=()=>{$('bk').value=JSON.stringify(S);$('bk').select();toast('Backup gerado. Toque em Copiar.')};
 $('cp').onclick=async()=>{
   const t=$('bk');if(!t.value)return toast('Gere o backup primeiro.');
@@ -272,11 +294,12 @@ $('cp').onclick=async()=>{
 };
 $('bk').oninput=()=>{rest=false;$('rs').textContent='Restaurar'};
 $('rs').onclick=()=>{
+  if(!$('bk').value.trim())return toast('Escolha o arquivo ou cole o texto primeiro.');
   let d;try{d=JSON.parse($('bk').value)}catch(e){return toast('Texto de backup inválido.')}
   if(!valid(d))return toast('Texto de backup inválido.');
   if(!rest){rest=true;$('rs').textContent='Confirmar';return toast('Isso substitui os dados atuais. Toque de novo para confirmar.')}
   S={p:d.p.map(p=>({...p,t:String(p.t||'')})),v:d.v.map(v=>({...v,t:String(v.t||'')})),c:d.c||[],r:d.r||[]};
-  rest=false;$('rs').textContent='Restaurar';save();rSum();toast('Backup restaurado.');
+  rest=false;$('rs').textContent='Restaurar';$('bf').value='';save();rSum();toast('Backup restaurado.');
 };
 
 function rCli(){
