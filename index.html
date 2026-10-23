@@ -75,9 +75,9 @@ nav svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.8;st
 <div class="card">
 <h2 id="ftitle" style="margin-top:0">Novo produto</h2>
 <label for="n">Nome</label>
-<input id="n" placeholder="Ex.: Calça jeans skinny" autocomplete="off">
+<input id="n" maxlength="100" placeholder="Ex.: Calça jeans skinny" autocomplete="off">
 <div class="grid2">
-<div><label for="t">Tamanho</label><input id="t" placeholder="Ex.: 40" autocomplete="off"></div>
+<div><label for="t">Tamanho</label><input id="t" maxlength="40" placeholder="Ex.: 40" autocomplete="off"></div>
 <div><label for="q">Quantidade</label><input id="q" type="number" inputmode="numeric" min="0" placeholder="0"></div>
 </div>
 <div class="grid2">
@@ -117,9 +117,9 @@ nav svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.8;st
 <p class="sub">Quem compra de você e quanto cada cliente deve.</p>
 <div class="card">
 <label for="cn" style="margin-top:0">Nome</label>
-<input id="cn" placeholder="Ex.: Maria Souza" autocomplete="off">
+<input id="cn" maxlength="100" placeholder="Ex.: Maria Souza" autocomplete="off">
 <label for="ct">Telefone (opcional)</label>
-<input id="ct" inputmode="tel" placeholder="(00) 00000-0000">
+<input id="ct" maxlength="40" inputmode="tel" placeholder="(00) 00000-0000">
 <button class="p full" id="csave">Salvar cliente</button>
 </div>
 <div class="card"><div class="mut">Total a receber</div><div class="big" id="ctot">R$ 0,00</div></div>
@@ -131,8 +131,8 @@ nav svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.8;st
 <p class="sub">Como está o seu negócio no período.</p>
 <select id="per" aria-label="Período">
 <option value="0">Hoje</option>
-<option value="7">Últimos 7 dias</option>
-<option value="30" selected>Últimos 30 dias</option>
+<option value="7">Últimos 7 dias (com hoje)</option>
+<option value="30" selected>Últimos 30 dias (com hoje)</option>
 <option value="m">Este mês</option>
 <option value="all">Tudo</option>
 </select>
@@ -140,7 +140,7 @@ nav svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.8;st
 <h2>Despesas</h2>
 <div class="card">
 <label for="dn" style="margin-top:0">Descrição</label>
-<input id="dn" placeholder="Ex.: Gasolina, frete, taxa do cartão" autocomplete="off">
+<input id="dn" maxlength="100" placeholder="Ex.: Gasolina, frete, taxa do cartão" autocomplete="off">
 <label for="dv">Valor (R$)</label>
 <input id="dv" inputmode="decimal" placeholder="30,00">
 <button class="p full" id="dsave">Registrar despesa</button>
@@ -178,7 +178,8 @@ const KEY='meu_estoque_v1';
 let S={p:[],v:[],c:[],r:[],d:[]},edit=null,del=null,rest=false,tt;
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const brl=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-const num=s=>{s=String(s).trim();if(!s)return NaN;if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=Number(s);return isFinite(n)?n:NaN};
+const num=s=>{s=String(s).trim();if(!s)return NaN;if(/^\d{1,3}(\.\d{3})+,\d+$/.test(s)||/^\d+,\d+$/.test(s))s=s.replace(/\./g,'').replace(',','.');else if(!/^\d+(\.\d+)?$/.test(s))return NaN;const n=Number(s);return n<1e9?Math.round(n*100)/100:NaN};
+const int=s=>{s=String(s).trim();return /^\d{1,7}$/.test(s)?parseInt(s,10):NaN};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const dec=n=>String(n).replace('.',',');
 const nm=p=>esc(p.n)+(p.t?' · '+esc(p.t):'');
@@ -188,7 +189,23 @@ const owe=id=>S.v.filter(v=>v.cid===id&&v.fiado).reduce((s,v)=>s+v.pr*v.q,0)-S.r
 function toast(m){const e=$('msg');e.textContent=m;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>{e.style.display='none'},3500)}
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d&&Array.isArray(d.p)&&Array.isArray(d.v))S=d}catch(e){}S.c=S.c||[];S.r=S.r||[];S.d=S.d||[]}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Não foi possível salvar neste navegador. Gere um backup.')}chk()}
-function valid(d){return d&&Array.isArray(d.p)&&Array.isArray(d.v)&&d.p.every(p=>p&&typeof p.id==='string'&&typeof p.n==='string'&&[p.q,p.c,p.pr].every(Number.isFinite))&&d.v.every(v=>v&&typeof v.id==='string'&&typeof v.n==='string'&&[v.q,v.c,v.pr,v.ts].every(Number.isFinite))&&[d.c,d.r,d.d].every(x=>x===undefined||Array.isArray(x))&&(d.c||[]).every(c=>c&&typeof c.id==='string'&&typeof c.n==='string')&&(d.r||[]).every(r=>r&&typeof r.cid==='string'&&[r.val,r.ts].every(Number.isFinite))&&(d.d||[]).every(x=>x&&typeof x.id==='string'&&typeof x.n==='string'&&[x.val,x.ts].every(Number.isFinite))}
+function valid(d){
+  const idok=x=>typeof x==='string'&&/^[a-z0-9]{1,40}$/i.test(x);
+  const str=(x,m)=>typeof x==='string'&&x.length<=m,nome=x=>str(x,120)&&x.trim().length>0;
+  const nn=(x,m)=>Number.isFinite(x)&&x>=0&&x<=m,opt=(x,m)=>x===undefined||str(x,m);
+  if(!d||typeof d!=='object'||!Array.isArray(d.p)||!Array.isArray(d.v))return false;
+  const C=d.c===undefined?[]:d.c,R=d.r===undefined?[]:d.r,D=d.d===undefined?[]:d.d;
+  if(![C,R,D].every(Array.isArray))return false;
+  const all=[d.p,d.v,C,R,D];
+  if(!all.every(a=>a.every(x=>x&&typeof x==='object'&&idok(x.id))))return false;
+  if(!all.every(a=>new Set(a.map(x=>x.id)).size===a.length))return false;
+  const K=new Set(C.map(x=>x.id));
+  return d.p.every(p=>nome(p.n)&&opt(p.t,40)&&Number.isInteger(p.q)&&nn(p.q,1e7)&&nn(p.c,1e9)&&nn(p.pr,1e9))
+    &&d.v.every(v=>nome(v.n)&&opt(v.t,40)&&Number.isInteger(v.q)&&v.q>=1&&v.q<=1e7&&nn(v.c,1e9)&&nn(v.pr,1e9)&&Number.isFinite(v.ts)&&v.ts>0&&(!v.pid||idok(v.pid))&&(!v.cid||idok(v.cid))&&(v.fiado===undefined||typeof v.fiado==='boolean')&&(!v.fiado||!!v.cid))
+    &&C.every(c=>nome(c.n)&&opt(c.tel,40))
+    &&R.every(r=>K.has(r.cid)&&nn(r.val,1e9)&&r.val>0&&Number.isFinite(r.ts))
+    &&D.every(x=>nome(x.n)&&nn(x.val,1e9)&&x.val>0&&Number.isFinite(x.ts));
+}
 
 function tab(n){
   ['prod','sell','cli','sum'].forEach(k=>{$('t-'+k).hidden=k!==n;$('b-'+k).classList.toggle('on',k===n)});
@@ -232,7 +249,8 @@ function rSell(){
 
 function rSum(){
   const m=$('per').value,d0=new Date();d0.setHours(0,0,0,0);
-  const from=m==='all'?0:m==='0'?d0.getTime():m==='m'?new Date(d0.getFullYear(),d0.getMonth(),1).getTime():Date.now()-(m==='7'?7:30)*864e5;
+  const back=n=>{const f=new Date(d0);f.setDate(f.getDate()-(n-1));return f.getTime()};
+  const from=m==='all'?0:m==='0'?d0.getTime():m==='m'?new Date(d0.getFullYear(),d0.getMonth(),1).getTime():back(m==='7'?7:30);
   const a=S.v.filter(v=>v.ts>=from);const dd=S.d.filter(x=>x.ts>=from),dsp=dd.reduce((s,x)=>s+x.val,0);
   const r=a.reduce((s,v)=>s+v.pr*v.q,0),c=a.reduce((s,v)=>s+v.c*v.q,0),l=r-c;
   const est=S.p.reduce((s,p)=>s+p.c*p.q,0),un=S.p.reduce((s,p)=>s+p.q,0);
@@ -261,9 +279,9 @@ function clearForm(){
 }
 
 $('save').onclick=()=>{
-  const n=$('n').value.trim(),t=$('t').value.trim(),q=parseInt($('q').value||'0',10),c=num($('c').value),pr=num($('pr').value);
+  const n=$('n').value.trim(),t=$('t').value.trim(),q=$('q').value.trim()===''?($('q').validity.badInput?NaN:0):int($('q').value),c=num($('c').value),pr=num($('pr').value);
   if(!n)return toast('Informe o nome da peça.');
-  if(!(q>=0))return toast('Quantidade inválida.');
+  if(!(q>=0))return toast('Quantidade inválida. Use um número inteiro.');
   if(!(c>=0)||!(pr>=0))return toast('Informe o custo e o preço de venda.');
   if(edit){const p=S.p.find(x=>x.id===edit);if(p)Object.assign(p,{n,t,q,c,pr})}
   else S.p.push({id:uid(),n,t,q,c,pr});
@@ -275,9 +293,9 @@ $('sp').onchange=fillPrice;
 $('per').onchange=rSum;
 
 $('sell').onclick=()=>{
-  const p=S.p.find(x=>x.id===$('sp').value),q=parseInt($('sq').value,10),v=num($('sv').value);
+  const p=S.p.find(x=>x.id===$('sp').value),q=int($('sq').value),v=num($('sv').value);
   if(!p)return toast('Escolha uma peça.');
-  if(!(q>=1))return toast('Quantidade inválida.');
+  if(!(q>=1))return toast('Quantidade inválida. Use um número inteiro maior que zero.');
   if(q>p.q)return toast('Só há '+p.q+' em estoque.');
   if(!(v>=0))return toast('Preço inválido.');
   const cid=$('sc').value,fiado=$('sf').value==='1';
@@ -291,8 +309,8 @@ document.addEventListener('click',e=>{
   const b=e.target.closest('[data-a]');if(!b)return;
   const id=b.dataset.id,a=b.dataset.a,p=S.p.find(x=>x.id===id);
   if(a==='add'&&p){
-    const n=parseInt($('in-'+id).value,10);
-    if(!(n>=1))return toast('Informe quantas peças chegaram.');
+    const n=int($('in-'+id).value);
+    if(!(n>=1))return toast('Informe quantas peças chegaram (número inteiro).');
     p.q+=n;save();rList();toast('Estoque atualizado.');
   }else if(a==='edit'&&p){
     edit=id;$('n').value=p.n;$('t').value=p.t||'';$('q').value=p.q;$('c').value=dec(p.c);$('pr').value=dec(p.pr);
@@ -366,8 +384,12 @@ $('rs').onclick=()=>{
   let d;try{d=JSON.parse($('bk').value)}catch(e){return toast('Texto de backup inválido.')}
   if(!valid(d))return toast('Texto de backup inválido.');
   if(!rest){rest=true;$('rs').textContent='Confirmar';return toast('Isso substitui os dados atuais. Toque de novo para confirmar.')}
-  S={p:d.p.map(p=>({...p,t:String(p.t||'')})),v:d.v.map(v=>({...v,t:String(v.t||'')})),c:d.c||[],r:d.r||[],d:d.d||[]};
-  rest=false;$('rs').textContent='Restaurar';$('bf').value='';save();rSum();toast('Backup restaurado.');
+  S={p:d.p.map(p=>({id:p.id,n:p.n,t:String(p.t||''),q:p.q,c:p.c,pr:p.pr})),
+    v:d.v.map(v=>({id:v.id,pid:v.pid||'',n:v.n,t:String(v.t||''),q:v.q,c:v.c,pr:v.pr,ts:v.ts,cid:v.cid||'',fiado:!!v.fiado})),
+    c:(d.c||[]).map(c=>({id:c.id,n:c.n,tel:String(c.tel||'')})),
+    r:(d.r||[]).map(r=>({id:r.id,cid:r.cid,val:r.val,ts:r.ts})),
+    d:(d.d||[]).map(x=>({id:x.id,n:x.n,val:x.val,ts:x.ts}))};
+  rest=false;$('rs').textContent='Restaurar';$('bf').value='';clearForm();del=null;save();rSum();toast('Backup restaurado.');
 };
 
 function rCli(){
