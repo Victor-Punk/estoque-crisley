@@ -45,7 +45,10 @@ button.s{padding:8px 12px;font-size:14px;min-height:38px;border-radius:10px}
 .pill{display:inline-block;padding:3px 11px;border-radius:999px;background:var(--soft);color:var(--ac);font-weight:700;font-size:14px;white-space:nowrap}
 .pill.bad{background:var(--bad-soft);color:var(--bad)}
 .pill.ok{background:rgba(43,122,80,.14);color:var(--ok)}
-.hero{grid-column:1/-1;order:-1;position:relative;padding:18px;background:linear-gradient(135deg,#1c376a,#2f5aa5);border-color:transparent;color:#fff}
+.fiado{grid-column:1/-1;order:-1}
+.debt{border-left:4px solid var(--bad)}
+.debt .big{color:var(--bad)}
+.hero{grid-column:1/-1;order:-2;position:relative;padding:18px;background:linear-gradient(135deg,#1c376a,#2f5aa5);border-color:transparent;color:#fff}
 .hero .mut{color:rgba(255,255,255,.78)}
 .hero .big{font-size:34px;color:#fff}
 .hero .big.bad{color:#ffd5c8}
@@ -120,6 +123,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 <section id="t-cli" hidden>
 <h1>Clientes</h1>
 <p class="sub">Quem compra de você e quanto cada cliente deve.</p>
+<div class="card"><div class="mut">Total a receber</div><div class="big" id="ctot">R$ 0,00</div></div>
 <div class="card">
 <label for="cn" style="margin-top:0">Nome</label>
 <input id="cn" maxlength="100" placeholder="Ex.: Maria Souza" autocomplete="off">
@@ -127,7 +131,6 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 <input id="ct" maxlength="40" inputmode="tel" placeholder="(00) 00000-0000">
 <button class="p full" id="csave">Salvar cliente</button>
 </div>
-<div class="card"><div class="mut">Total a receber</div><div class="big" id="ctot">R$ 0,00</div></div>
 <div id="clist"></div>
 </section>
 
@@ -170,7 +173,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 </details>
 </div>
 </section>
-<p class="ver">v1.3</p>
+<p class="ver">v1.4</p>
 </main>
 
 <div id="msg" role="status"></div>
@@ -274,8 +277,8 @@ function rSum(){
 <div class="card"><div class="mut">Custo das peças vendidas</div><div class="big">${brl(c)}</div></div>
 <div class="card"><div class="mut">Margem</div><div class="big">${r?Math.round(l/r*100)+'%':'—'}</div></div>
 <div class="card"><div class="mut">Despesas</div><div class="big">${brl(dsp)}</div></div>
-<div class="card hero"><div class="mut">Lucro real (após despesas)</div><div class="big ${l-dsp<0?'bad':'ok'}">${brl(l-dsp)}</div></div></div>
-<div class="card"><div class="mut">Fiado a receber</div><div class="big ${rec>0?'bad':''}">${brl(rec)}</div></div>
+<div class="card hero"><div class="mut">Lucro real (após despesas)</div><div class="big ${l-dsp<0?'bad':'ok'}">${brl(l-dsp)}</div></div>
+<div class="card fiado${rec>0.005?' debt':''}"><div class="mut">Fiado a receber</div><div class="big">${brl(rec)}</div></div></div>
 <div class="card"><div class="mut">Em estoque agora</div><div><b>${un}</b> peças · ${brl(est)} a preço de custo</div><div class="mut" style="margin-top:6px">${a.length} venda(s) no período. Venda fiado entra na receita e no lucro no dia da venda. O lucro real é o lucro das vendas menos as despesas registradas. Recebido = vendas pagas na hora mais pagamentos de fiado no período.</div></div>`;
   $('dlist').innerHTML=dd.length?[...dd].sort((a,b)=>b.ts-a.ts).slice(0,20).map(x=>`<div class="card"><div class="row between"><b>${esc(x.n)}</b><span>${brl(x.val)}</span></div><div class="mut">${new Date(x.ts).toLocaleDateString('pt-BR')}</div><button class="s" data-a="ddel" data-id="${x.id}" style="margin-top:8px">${del===x.id?'Confirmar exclusão':'Excluir'}</button></div>`).join(''):'<p class="mut">Nenhuma despesa no período.</p>';
   $('mlist').innerHTML=S.m.length?S.m.slice(0,30).map(x=>`<div class="card row between"><div><b>${esc(x.n)}</b><div class="mut">${esc(x.t)} · ${new Date(x.ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}${x.o?' · '+esc(x.o):''}</div></div><span class="pill ${x.q<0?'bad':''}">${x.q>0?'+':''}${x.q}</span></div>`).join(''):'<p class="mut">Nenhuma movimentação registrada ainda.</p>';
@@ -295,6 +298,7 @@ function clearForm(){
 $('save').onclick=()=>{
   const n=$('n').value.trim(),t=$('t').value.trim(),q=$('q').value.trim()===''?($('q').validity.badInput?NaN:0):int($('q').value),c=num($('c').value),pr=num($('pr').value);
   if(!n)return toast('Informe o nome da peça.');
+  if($('q').value.trim()===''&&!$('q').validity.badInput)return toast('Adicione uma quantidade de produtos para salvar o produto.');
   if(!(q>=0))return toast('Quantidade inválida. Use um número inteiro.');
   if(!(c>=0)||!(pr>=0))return toast('Informe o custo e o preço de venda.');
   if(edit){const p=S.p.find(x=>x.id===edit);if(p){const dq=q-p.q;Object.assign(p,{n,t,q,c,pr});if(dq)mov('ajuste',lbl(p),dq,'edição do produto')}}
@@ -415,8 +419,9 @@ $('rs').onclick=()=>{
 function tel55(t){const n=String(t||'').replace(/\D/g,'');if(n.startsWith('55')&&n.length>=12&&n.length<=13)return n;return n.length>=10&&n.length<=11?'55'+n:''}
 function waUrl(c,d){const n=tel55(c.tel);return n?'https://wa.me/'+n+'?text='+encodeURIComponent('Olá, '+c.n.split(' ')[0]+'! Tudo bem? Passando para lembrar do valor pendente de '+brl(d)+' na Chris-Look’s. Qualquer dúvida, é só falar!'):''}
 function rCli(){
-  $('ctot').textContent=brl(S.c.reduce((s,c)=>s+Math.max(0,owe(c.id)),0));
-  $('clist').innerHTML=S.c.length?[...S.c].sort((a,b)=>a.n.localeCompare(b.n,'pt-BR')).map(c=>{const d=owe(c.id),dv=d>0.005;return `<div class="card"><div class="row between"><b>${esc(c.n)}</b><span class="pill ${dv?'bad':'ok'}">${dv?'Deve '+brl(d):'Em dia'}</span></div>${c.tel?`<div class="mut">${esc(c.tel)}</div>`:''}<div class="row" style="margin-top:8px">${dv?`<input id="pay-${c.id}" inputmode="decimal" placeholder="Valor recebido" aria-label="Valor recebido" style="max-width:140px"><button class="s" data-a="pay" data-id="${c.id}">Registrar pagamento</button>`:''}${dv?(waUrl(c,d)?`<a class="lnk" href="${waUrl(c,d)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>`:`<input id="tel-${c.id}" inputmode="tel" maxlength="40" placeholder="Telefone com DDD" aria-label="Telefone" style="max-width:170px"><button class="s" data-a="stel" data-id="${c.id}">Salvar telefone</button>`):''}<button class="s" data-a="cdel" data-id="${c.id}">${del===c.id?'Confirmar exclusão':'Excluir'}</button></div></div>`}).join(''):'<p class="mut">Nenhum cliente cadastrado ainda.</p>';
+  const tot=S.c.reduce((s,c)=>s+Math.max(0,owe(c.id)),0);
+  $('ctot').textContent=brl(tot);$('ctot').parentNode.classList.toggle('debt',tot>0.005);
+  $('clist').innerHTML=S.c.length?[...S.c].sort((a,b)=>Math.max(0,owe(b.id))-Math.max(0,owe(a.id))||a.n.localeCompare(b.n,'pt-BR')).map(c=>{const d=owe(c.id),dv=d>0.005;return `<div class="card${dv?' debt':''}"><div class="row between"><b>${esc(c.n)}</b><span class="pill ${dv?'bad':'ok'}">${dv?'Deve '+brl(d):'Em dia'}</span></div>${c.tel?`<div class="mut">${esc(c.tel)}</div>`:''}<div class="row" style="margin-top:8px">${dv?`<input id="pay-${c.id}" inputmode="decimal" placeholder="Valor recebido" aria-label="Valor recebido" style="max-width:140px"><button class="s" data-a="pay" data-id="${c.id}">Registrar pagamento</button>`:''}${dv?(waUrl(c,d)?`<a class="lnk" href="${waUrl(c,d)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>`:`<input id="tel-${c.id}" inputmode="tel" maxlength="40" placeholder="Telefone com DDD" aria-label="Telefone" style="max-width:170px"><button class="s" data-a="stel" data-id="${c.id}">Salvar telefone</button>`):''}<button class="s" data-a="cdel" data-id="${c.id}">${del===c.id?'Confirmar exclusão':'Excluir'}</button></div></div>`}).join(''):'<p class="mut">Nenhum cliente cadastrado ainda.</p>';
 }
 $('csave').onclick=()=>{
   const n=$('cn').value.trim(),tel=$('ct').value.trim();
