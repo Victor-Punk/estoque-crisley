@@ -173,7 +173,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 </details>
 </div>
 </section>
-<p class="ver">v1.4</p>
+<p class="ver">v1.5</p>
 </main>
 
 <div id="msg" role="status"></div>
@@ -349,6 +349,12 @@ document.addEventListener('click',e=>{
     if(!(v>0))return toast('Informe o valor recebido.');
     if(v>d+0.005)return toast('Valor maior que o saldo de '+brl(d)+'.');
     S.r.push({id:uid(),cid:id,val:v,ts:Date.now()});save();rCli();toast('Pagamento registrado.');
+  }else if(a==='payu'){
+    const k=int($('pu-'+id).value),n=nOpen(id);
+    if(!(k>=1))return toast('Informe quantas peças foram pagas (número inteiro).');
+    if(k>n)return toast('O cliente só tem '+n+' peça(s) em aberto.');
+    const v=Math.min(valUnits(id,k),owe(id));
+    S.r.push({id:uid(),cid:id,val:v,ts:Date.now()});save();rCli();toast(k+' peça(s) pagas: '+brl(v)+' abatidos.');
   }else if(a==='cdel'){
     if(owe(id)>0.005)return toast('Este cliente ainda deve. Registre o pagamento antes de excluir.');
     if(del===id){S.c=S.c.filter(x=>x.id!==id);S.r=S.r.filter(x=>x.cid!==id);del=null;save();toast('Cliente excluído.')}else del=id;
@@ -418,10 +424,23 @@ $('rs').onclick=()=>{
 
 function tel55(t){const n=String(t||'').replace(/\D/g,'');if(n.startsWith('55')&&n.length>=12&&n.length<=13)return n;return n.length>=10&&n.length<=11?'55'+n:''}
 function waUrl(c,d){const n=tel55(c.tel);return n?'https://wa.me/'+n+'?text='+encodeURIComponent('Olá, '+c.n.split(' ')[0]+'! Tudo bem? Passando para lembrar do valor pendente de '+brl(d)+' na Chris-Look’s. Qualquer dúvida, é só falar!'):''}
+function openSegs(id){
+  let paid=S.r.filter(r=>r.cid===id).reduce((s,r)=>s+r.val,0);const out=[];
+  for(const v of S.v.filter(v=>v.cid===id&&v.fiado).sort((a,b)=>a.ts-b.ts)){
+    if(!(v.pr>0.005))continue;
+    const full=Math.min(v.q,Math.floor((paid+0.005)/v.pr));paid=Math.max(0,paid-full*v.pr);
+    let left=v.q-full;
+    if(left>0&&paid>0.005){const rem=v.pr-paid;paid=0;if(rem>0.005)out.push({n:1,val:rem});left--}
+    if(left>0)out.push({n:left,val:v.pr});
+  }
+  return out;
+}
+const nOpen=id=>openSegs(id).reduce((s,x)=>s+x.n,0);
+function valUnits(id,k){let t=0;for(const x of openSegs(id)){const m=Math.min(k,x.n);t+=m*x.val;k-=m;if(k<=0)break}return Math.round(t*100)/100}
 function rCli(){
   const tot=S.c.reduce((s,c)=>s+Math.max(0,owe(c.id)),0);
   $('ctot').textContent=brl(tot);$('ctot').parentNode.classList.toggle('debt',tot>0.005);
-  $('clist').innerHTML=S.c.length?[...S.c].sort((a,b)=>Math.max(0,owe(b.id))-Math.max(0,owe(a.id))||a.n.localeCompare(b.n,'pt-BR')).map(c=>{const d=owe(c.id),dv=d>0.005;return `<div class="card${dv?' debt':''}"><div class="row between"><b>${esc(c.n)}</b><span class="pill ${dv?'bad':'ok'}">${dv?'Deve '+brl(d):'Em dia'}</span></div>${c.tel?`<div class="mut">${esc(c.tel)}</div>`:''}<div class="row" style="margin-top:8px">${dv?`<input id="pay-${c.id}" inputmode="decimal" placeholder="Valor recebido" aria-label="Valor recebido" style="max-width:140px"><button class="s" data-a="pay" data-id="${c.id}">Registrar pagamento</button>`:''}${dv?(waUrl(c,d)?`<a class="lnk" href="${waUrl(c,d)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>`:`<input id="tel-${c.id}" inputmode="tel" maxlength="40" placeholder="Telefone com DDD" aria-label="Telefone" style="max-width:170px"><button class="s" data-a="stel" data-id="${c.id}">Salvar telefone</button>`):''}<button class="s" data-a="cdel" data-id="${c.id}">${del===c.id?'Confirmar exclusão':'Excluir'}</button></div></div>`}).join(''):'<p class="mut">Nenhum cliente cadastrado ainda.</p>';
+  $('clist').innerHTML=S.c.length?[...S.c].sort((a,b)=>Math.max(0,owe(b.id))-Math.max(0,owe(a.id))||a.n.localeCompare(b.n,'pt-BR')).map(c=>{const d=owe(c.id),dv=d>0.005;return `<div class="card${dv?' debt':''}"><div class="row between"><b>${esc(c.n)}</b><span class="pill ${dv?'bad':'ok'}">${dv?'Deve '+brl(d):'Em dia'}</span></div>${c.tel?`<div class="mut">${esc(c.tel)}</div>`:''}${dv?`<div class="mut">${nOpen(c.id)} peça(s) em aberto</div>`:''}<div class="row" style="margin-top:8px">${dv?`<input id="pay-${c.id}" inputmode="decimal" placeholder="Valor recebido" aria-label="Valor recebido" style="max-width:140px"><button class="s" data-a="pay" data-id="${c.id}">Registrar pagamento</button></div><div class="row" style="margin-top:8px"><input id="pu-${c.id}" inputmode="numeric" placeholder="Peças pagas" aria-label="Peças pagas" style="max-width:140px"><button class="s" data-a="payu" data-id="${c.id}">Pagar por peças</button></div><div class="row" style="margin-top:8px">`:''}${dv?(waUrl(c,d)?`<a class="lnk" href="${waUrl(c,d)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>`:`<input id="tel-${c.id}" inputmode="tel" maxlength="40" placeholder="Telefone com DDD" aria-label="Telefone" style="max-width:170px"><button class="s" data-a="stel" data-id="${c.id}">Salvar telefone</button>`):''}<button class="s" data-a="cdel" data-id="${c.id}">${del===c.id?'Confirmar exclusão':'Excluir'}</button></div></div>`}).join(''):'<p class="mut">Nenhum cliente cadastrado ainda.</p>';
 }
 $('csave').onclick=()=>{
   const n=$('cn').value.trim(),tel=$('ct').value.trim();
