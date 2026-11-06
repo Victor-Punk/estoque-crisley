@@ -38,7 +38,7 @@ button.p{background:linear-gradient(180deg,rgba(255,255,255,.3),rgba(255,255,255
 button.full{width:100%;margin-top:14px}
 button.s{padding:8px 12px;font-size:14px;min-height:38px;border-radius:10px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-#sum .grid2{margin-bottom:12px}
+#sum .grid2,#esum{margin-bottom:12px}
 .grid2>.card{margin-bottom:0}
 .big{font-size:26px;font-weight:700;line-height:1.15;margin-top:2px}
 .ok{color:var(--ok)}.bad{color:var(--bad)}
@@ -53,7 +53,7 @@ button.s{padding:8px 12px;font-size:14px;min-height:38px;border-radius:10px}
 .hero .big{font-size:34px;color:#fff}
 .hero .big.bad{color:#ffd5c8}
 .hero::after{content:"";position:absolute;inset:6px;border:1.5px dashed rgba(255,255,255,.3);border-radius:11px;pointer-events:none}
-#list>p.mut,#clist>p.mut,#hist>p.mut,#dlist>p.mut,#low>p.mut{border:1.5px dashed var(--bd);border-radius:14px;padding:18px;text-align:center;margin:0 0 12px}
+#list>p.mut,#elist>p.mut,#emlist>p.mut,#clist>p.mut,#hist>p.mut,#dlist>p.mut,#low>p.mut{border:1.5px dashed var(--bd);border-radius:14px;padding:18px;text-align:center;margin:0 0 12px}
 .warn{border-left:4px solid var(--bad)}
 #hint{border-left:4px solid var(--stitch)}
 summary{cursor:pointer;padding:8px 0;font-weight:600}
@@ -97,6 +97,16 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 <button class="full" id="cancel" hidden>Cancelar edição</button>
 </div>
 <div id="list"></div>
+</section>
+
+<section id="t-est" hidden>
+<h1>Estoque</h1>
+<p class="sub">Quanto você tem de cada peça.</p>
+<div id="esum" class="grid2"></div>
+<h2>Peças</h2>
+<div id="elist"></div>
+<h2>Últimas movimentações</h2>
+<div id="emlist"></div>
 </section>
 
 <section id="t-sell" hidden>
@@ -173,12 +183,13 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 </details>
 </div>
 </section>
-<p class="ver">v1.5</p>
+<p class="ver">v1.6</p>
 </main>
 
 <div id="msg" role="status"></div>
 <nav>
 <button id="b-prod" onclick="tab('prod')"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg></span>Produtos</button>
+<button id="b-est" onclick="tab('est')"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v4H3z"/><path d="M5 8v12h14V8M10 12h4"/></svg></span>Estoque</button>
 <button id="b-sell" onclick="tab('sell')"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l1 12H5z"/><path d="M9 8a3 3 0 016 0"/></svg></span>Vender</button>
 <button id="b-cli" onclick="tab('cli')"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span>Clientes</button>
 <button id="b-sum" onclick="tab('sum')"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-8M12 20V5M19 20v-12"/></svg></span>Resumo</button>
@@ -223,9 +234,10 @@ function valid(d){
 }
 
 function tab(n){
-  ['prod','sell','cli','sum'].forEach(k=>{$('t-'+k).hidden=k!==n;$('b-'+k).classList.toggle('on',k===n)});
+  ['prod','est','sell','cli','sum'].forEach(k=>{$('t-'+k).hidden=k!==n;$('b-'+k).classList.toggle('on',k===n)});
   del=null;
   if(n==='prod')rList();
+  if(n==='est')rEst();
   if(n==='sell')rSell();
   if(n==='sum')rSum();
   if(n==='cli')rCli();
@@ -250,6 +262,16 @@ function fillPrice(){
   const p=S.p.find(x=>x.id===$('sp').value);
   $('sv').value=p?dec(p.pr):'';
   $('sinfo').textContent=p?`Custo ${brl(p.c)} · lucro por peça no preço de tabela ${brl(p.pr-p.c)}`:'';
+}
+function movList(){
+  return S.m.length?S.m.slice(0,30).map(x=>`<div class="card row between"><div><b>${esc(x.n)}</b><div class="mut">${esc(x.t)} · ${new Date(x.ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}${x.o?' · '+esc(x.o):''}</div></div><span class="pill ${x.q<0?'bad':''}">${x.q>0?'+':''}${x.q}</span></div>`).join(''):'<p class="mut">Nenhuma movimentação registrada ainda.</p>';
+}
+function rEst(){
+  const a=[...S.p].sort((x,y)=>x.q-y.q||x.n.localeCompare(y.n,'pt-BR'));
+  const un=S.p.reduce((s,p)=>s+p.q,0),cst=S.p.reduce((s,p)=>s+p.c*p.q,0),vnd=S.p.reduce((s,p)=>s+p.pr*p.q,0),nb=S.p.filter(low).length;
+  $('esum').innerHTML=`<div class="card"><div class="mut">Peças em estoque</div><div class="big">${un}</div></div><div class="card"><div class="mut">Estoque baixo</div><div class="big ${nb?'bad':''}">${nb}</div></div><div class="card"><div class="mut">Valor a preço de custo</div><div class="big">${brl(cst)}</div></div><div class="card"><div class="mut">Valor a preço de venda</div><div class="big">${brl(vnd)}</div></div>`;
+  $('elist').innerHTML=a.length?a.map(p=>`<div class="card"><div class="row between"><b>${nm(p)}</b><span class="pill ${low(p)?'bad':''}">${p.q>0?p.q+' un.':'Sem estoque'}</span></div><div class="row" style="margin-top:8px"><input id="ei-${p.id}" type="number" inputmode="numeric" min="1" placeholder="Chegou" aria-label="Quantidade que chegou" style="max-width:92px"><button class="s" data-a="eadd" data-id="${p.id}">Adicionar ao estoque</button></div></div>`).join(''):'<p class="mut">Nenhum produto cadastrado. Cadastre na aba Produtos.</p>';
+  $('emlist').innerHTML=movList();
 }
 function rSell(){
   const s=$('sp'),cur=s.value,a=S.p.filter(p=>p.q>0);const sc=$('sc'),cc=sc.value;sc.innerHTML='<option value="">Sem cliente</option>'+S.c.map(c=>`<option value="${c.id}">${esc(c.n)}</option>`).join('');if(S.c.some(c=>c.id===cc))sc.value=cc;
@@ -330,6 +352,10 @@ document.addEventListener('click',e=>{
     const n=int($('in-'+id).value);
     if(!(n>=1))return toast('Informe quantas peças chegaram (número inteiro).');
     p.q+=n;mov('entrada',lbl(p),n);save();rList();toast('Estoque atualizado.');
+  }else if(a==='eadd'&&p){
+    const n=int($('ei-'+id).value);
+    if(!(n>=1))return toast('Informe quantas peças chegaram (número inteiro).');
+    p.q+=n;mov('entrada',lbl(p),n);save();rEst();toast('Estoque atualizado.');
   }else if(a==='edit'&&p){
     edit=id;$('n').value=p.n;$('t').value=p.t||'';$('q').value=p.q;$('c').value=dec(p.c);$('pr').value=dec(p.pr);
     $('ftitle').textContent='Editar produto';$('cancel').hidden=false;mg();window.scrollTo({top:0,behavior:'smooth'});
