@@ -185,7 +185,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 </details>
 </div>
 </section>
-<p class="ver">v2.0</p>
+<p class="ver">v2.1</p>
 </main>
 
 <div id="msg" role="status"></div>
@@ -200,10 +200,10 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 <script>
 const $=id=>document.getElementById(id);
 const KEY='meu_estoque_v1';
-let S={p:[],v:[],c:[],r:[],d:[],m:[]},edit=null,del=null,rest=false,tt,zc=false,exo=null,ced=null,cur='prod',snap='';
+let S={p:[],v:[],c:[],r:[],d:[],m:[]},edit=null,del=null,rest=false,tt,zc=false,exo=null,ced=null,cur='prod',snap='',eq0=0,stNote='',corrupt=false,orph=0;
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const brl=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-const num=s=>{s=String(s).trim();if(!s)return NaN;if(/^\d{1,3}(\.\d{3})+,\d+$/.test(s)||/^\d+,\d+$/.test(s))s=s.replace(/\./g,'').replace(',','.');else if(!/^\d+(\.\d+)?$/.test(s))return NaN;const n=Number(s);return n<1e9?Math.round(n*100)/100:NaN};
+const num=s=>{s=String(s).trim();if(!s)return NaN;if(/^\d{1,3}(\.\d{3})+,\d+$/.test(s)||/^\d+,\d+$/.test(s))s=s.replace(/\./g,'').replace(',','.');else if(/^[1-9]\d{0,2}(\.\d{3})+$/.test(s))s=s.replace(/\./g,'');else if(!/^\d+(\.\d+)?$/.test(s))return NaN;const n=Number(s);return n<1e9?Math.round(n*100)/100:NaN};
 const int=s=>{s=String(s).trim();return /^\d{1,7}$/.test(s)?parseInt(s,10):NaN};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const dec=n=>String(n).replace('.',',');
@@ -217,7 +217,25 @@ const hist=id=>S.v.some(v=>v.cid===id)||S.r.some(r=>r.cid===id);
 const cn=id=>(S.c.find(c=>c.id===id)||{n:'cliente removido'}).n;
 const owe=id=>S.v.filter(v=>v.cid===id&&v.fiado).reduce((s,v)=>s+v.pr*v.q,0)-S.r.filter(r=>r.cid===id).reduce((s,r)=>s+rv(r),0);
 function toast(m){const e=$('msg');e.textContent=m;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>{e.style.display='none'},3500)}
-function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d&&Array.isArray(d.p)&&Array.isArray(d.v))S=d}catch(e){}S.c=S.c||[];S.r=S.r||[];S.d=S.d||[];S.m=S.m||[];snap=JSON.stringify(S)}
+const sane=d=>{
+  const ok=(a,id)=>Array.isArray(a)&&a.every(y=>y&&typeof y==='object'&&(!id||typeof y.id==='string')),f=Number.isFinite;
+  return ok(d.p,1)&&ok(d.v,1)&&d.p.every(p=>typeof p.n==='string'&&f(p.q)&&f(p.c)&&f(p.pr))&&d.v.every(v=>typeof v.n==='string'&&f(v.q)&&f(v.pr)&&f(v.c))
+    &&['c','r','d','m'].every(k=>d[k]===undefined||ok(d[k],k!=='m'))
+    &&(d.c||[]).every(c=>typeof c.n==='string')&&(d.r||[]).every(r=>f(r.val)&&typeof r.cid==='string')&&(d.d||[]).every(y=>f(y.val));
+};
+function fixOrphans(){
+  const ids=new Set(S.c.map(c=>c.id)),miss=[...new Set(S.v.filter(v=>v.fiado&&v.cid&&!ids.has(v.cid)).map(v=>v.cid))];
+  miss.forEach((id,k)=>S.c.push({id,n:'Cliente removido '+(k+1),tel:'',arq:false}));
+  return miss.length;
+}
+function load(){
+  let raw=null;try{raw=localStorage.getItem(KEY)}catch(e){}
+  if(raw){
+    try{const d=JSON.parse(raw);if(d&&Array.isArray(d.p)&&Array.isArray(d.v)&&sane(d))S=d;else corrupt=true}catch(e){corrupt=true}
+    if(corrupt){try{localStorage.setItem(KEY+'_invalido',raw)}catch(e){}}
+  }
+  S.c=S.c||[];S.r=S.r||[];S.d=S.d||[];S.m=S.m||[];orph=fixOrphans();snap=JSON.stringify(S);
+}
 function save(){
   const s=JSON.stringify(S);
   try{localStorage.setItem(KEY,s);snap=s;chk();return true}
@@ -351,9 +369,9 @@ $('save').onclick=()=>{
   if(!(c>=0)||!(pr>=0))return toast('Informe o custo e o preço de venda.');
   if(pr===0)return toast('O preço de venda não pode ser R$ 0,00.');
   if(c===0&&!zc){zc=true;return toast('Custo R$ 0,00: o lucro vai aparecer inflado. Toque em Salvar de novo para confirmar.')}
-  if(edit){const p=S.p.find(x=>x.id===edit);if(p){const dq=q-p.q;Object.assign(p,{n,t,q,c,pr});if(dq)mov('ajuste',lbl(p),dq,'edição do produto')}}
+  if(edit){const p=S.p.find(x=>x.id===edit);if(p){const dq=q-eq0,nq=p.q+dq;if(nq<0)return toast('O estoque mudou desde que você abriu a edição (agora há '+p.q+'). Cancele e abra a edição de novo.');if(nq>1e7)return toast('Limite de 10.000.000 unidades por peça.');if(p.q!==eq0)stNote=' O estoque mudou enquanto você editava: agora há '+nq+' un.';Object.assign(p,{n,t,q:nq,c,pr});if(dq)mov('ajuste',lbl(p),dq,'edição do produto')}}
   else{S.p.push({id:uid(),n,t,q,c,pr});if(q>0)mov('cadastro',n+(t?' · '+t:''),q)}
-  zc=false;if(!save())return;clearForm();rList();toast('Produto salvo.');
+  zc=false;if(!save())return;clearForm();rList();toast('Produto salvo.'+stNote);stNote='';
 };
 $('cancel').onclick=clearForm;
 $('c').oninput=()=>{zc=false;mg()};$('pr').oninput=mg;
@@ -387,7 +405,7 @@ document.addEventListener('click',e=>{
     if(p.q+n>1e7)return toast('Limite de 10.000.000 unidades por peça.');
     p.q+=n;mov('entrada',lbl(p),n);if(!save())return;rEst();toast('Estoque atualizado.');
   }else if(a==='edit'&&p){
-    edit=id;$('n').value=p.n;$('t').value=p.t||'';$('q').value=p.q;$('c').value=dec(p.c);$('pr').value=dec(p.pr);
+    edit=id;eq0=p.q;$('n').value=p.n;$('t').value=p.t||'';$('q').value=p.q;$('c').value=dec(p.c);$('pr').value=dec(p.pr);
     $('ftitle').textContent='Editar produto';$('cancel').hidden=false;mg();window.scrollTo({top:0,behavior:'smooth'});
   }else if(a==='del'&&p){
     if(del===id){S.p=S.p.filter(x=>x.id!==id);del=null;if(!save())return;toast('Produto excluído.')}else del=id;
@@ -484,7 +502,7 @@ $('rs').onclick=()=>{
     r:(d.r||[]).map(r=>({id:r.id,cid:r.cid,val:r.val,ts:r.ts,est:!!r.est})),
     d:(d.d||[]).map(x=>({id:x.id,n:x.n,val:x.val,ts:x.ts})),
     m:(d.m||[]).map(x=>({id:x.id,ts:x.ts,t:x.t,n:x.n,q:x.q,o:String(x.o||'')}))};
-  rest=false;$('rs').textContent='Restaurar';$('bf').value='';clearForm();del=null;if(!save())return;rSum();toast('Backup restaurado.');
+  rest=false;$('rs').textContent='Restaurar';$('bf').value='';clearForm();del=null;corrupt=false;const o=fixOrphans();if(!save())return;rSum();toast(o?'Backup restaurado. '+o+' cliente(s) com fiado sem cadastro foram recriados como “Cliente removido”.':'Backup restaurado.');
 };
 
 function tel55(t){const n=String(t||'').replace(/\D/g,'');if(n.startsWith('55')&&n.length>=12&&n.length<=13)return n;return n.length>=10&&n.length<=11?'55'+n:''}
@@ -534,6 +552,7 @@ function chk(){
   const e=$('bkw'),t=lastBk(),has=S.p.length||S.v.length||S.c.length||S.d.length;
   const n=t?Math.floor((Date.now()-t)/864e5):0;
   const lb=$('lastbk');if(lb)lb.textContent=t?'Último backup: '+(n===0?'hoje':'há '+n+(n===1?' dia':' dias')):'Último backup: nenhum ainda';
+  if(corrupt){e.innerHTML='Os dados salvos neste aparelho estavam corrompidos e foram isolados (uma cópia foi guardada). Restaure o seu último backup em Resumo &gt; Backup.<br><button class="s" onclick="goBk()" style="margin-top:8px">Ir para o backup</button>';e.hidden=false;return}
   if(has&&(!t||n>=7)){
     e.innerHTML=(t?'Último backup: há '+n+(n===1?' dia':' dias')+'.':'Você ainda não fez nenhum backup.')+' Faça um agora para não perder seus dados.<br><button class="s" onclick="goBk()" style="margin-top:8px">Fazer backup</button>';
     e.hidden=false;
@@ -554,6 +573,8 @@ $('dsave').onclick=()=>{
 };
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 load();tab('prod');chk();showHint();
+if(orph)toast(orph+' cliente(s) com fiado sem cadastro foram recriados como “Cliente removido”. Confira em Clientes.');
+window.addEventListener('storage',e=>{if(e.key===KEY&&e.newValue){load();tab(cur);chk()}});
 </script>
 </body>
 </html>
