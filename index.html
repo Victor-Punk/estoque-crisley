@@ -60,7 +60,7 @@ button.s{padding:8px 12px;font-size:14px;min-height:38px;border-radius:10px}
 #hint{border-left:4px solid var(--stitch)}
 summary{cursor:pointer;padding:8px 0;font-weight:600}
 .ver{text-align:center;color:var(--mut);font-size:12px;opacity:.7;margin:24px 0 0}
-a.lnk{display:inline-flex;align-items:center;text-decoration:none;font-weight:600;font-size:14px;color:var(--tx);background:var(--card);border:1.5px solid var(--bd);border-radius:10px;padding:8px 12px;min-height:38px}
+.ex{margin-top:12px;border-top:1.5px dashed var(--bd);padding-top:10px}.ex .line{display:flex;justify-content:space-between;gap:10px;padding:6px 0;font-size:14px;border-bottom:1px solid var(--bd)}.ex .line:last-child{border-bottom:0}.ex .line>span:last-child{white-space:nowrap;font-weight:700}.ex .grid2{margin-bottom:10px}.ex .grid2>div{background:var(--glass2);border:1px solid var(--bd);border-radius:12px;padding:8px 10px}.ex .grid2 b{display:block;font-size:17px}a.lnk{display:inline-flex;align-items:center;text-decoration:none;font-weight:600;font-size:14px;color:var(--tx);background:var(--card);border:1.5px solid var(--bd);border-radius:10px;padding:8px 12px;min-height:38px}
 nav{position:fixed;left:12px;right:12px;max-width:536px;margin:0 auto;bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;padding:6px;border-radius:26px;background:var(--glass);border:1px solid var(--glass-bd);-webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);box-shadow:inset 0 1px 0 var(--hi),0 10px 30px rgba(10,20,50,.2)}
 nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;border:0;background:transparent;box-shadow:none;border-radius:12px;padding:6px 2px;min-height:54px;font-size:12px;font-weight:600;color:var(--mut)}
 nav button.on{color:var(--ac)}
@@ -185,7 +185,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 </details>
 </div>
 </section>
-<p class="ver">v1.8</p>
+<p class="ver">v1.9</p>
 </main>
 
 <div id="msg" role="status"></div>
@@ -200,7 +200,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 <script>
 const $=id=>document.getElementById(id);
 const KEY='meu_estoque_v1';
-let S={p:[],v:[],c:[],r:[],d:[],m:[]},edit=null,del=null,rest=false,tt;
+let S={p:[],v:[],c:[],r:[],d:[],m:[]},edit=null,del=null,rest=false,tt,zc=false,exo=null;
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const brl=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const num=s=>{s=String(s).trim();if(!s)return NaN;if(/^\d{1,3}(\.\d{3})+,\d+$/.test(s)||/^\d+,\d+$/.test(s))s=s.replace(/\./g,'').replace(',','.');else if(!/^\d+(\.\d+)?$/.test(s))return NaN;const n=Number(s);return n<1e9?Math.round(n*100)/100:NaN};
@@ -237,7 +237,7 @@ function valid(d){
 
 function tab(n){
   ['prod','est','sell','cli','sum'].forEach(k=>{$('t-'+k).hidden=k!==n;$('b-'+k).classList.toggle('on',k===n)});
-  del=null;
+  del=null;exo=null;
   if(n==='prod')rList();
   if(n==='est')rEst();
   if(n==='sell')rSell();
@@ -252,6 +252,7 @@ function rList(){
   L.innerHTML=[...S.p].sort((a,b)=>a.n.localeCompare(b.n,'pt-BR')).map(p=>`<div class="card">
 <div class="row between"><b>${nm(p)}</b><span class="pill ${low(p)?'bad':''}">${p.q} un.</span></div>
 <div class="mut">Custo ${brl(p.c)} · Preço ${brl(p.pr)} · Lucro ${brl(p.pr-p.c)}</div>
+${(!(p.pr>0)||!(p.c>0))?`<div class="mut bad">Atenção: ${!(p.pr>0)?'sem preço de venda':'sem custo'}. Toque em Editar para corrigir.</div>`:''}
 <div class="row" style="margin-top:8px">
 <input id="in-${p.id}" type="number" inputmode="numeric" min="1" placeholder="Chegou" aria-label="Quantidade que chegou" style="max-width:92px">
 <button class="s" data-a="add" data-id="${p.id}">Adicionar ao estoque</button>
@@ -287,6 +288,15 @@ function rSell(){
 <button class="s" data-a="undo" data-id="${v.id}" style="margin-top:8px">Desfazer venda</button></div>`).join('')||'<p class="mut">Nenhuma venda registrada ainda.</p>';
 }
 
+function zeroAlert(from){
+  const zp=S.p.filter(p=>!(p.pr>0)||!(p.c>0)),sv=S.v.filter(v=>v.ts>=from),zv=sv.filter(v=>!(v.pr>0)).length,zk=sv.filter(v=>v.pr>0&&!(v.c>0)).length;
+  if(!zp.length&&!zv&&!zk)return '';
+  const l=[];
+  if(zp.length)l.push(zp.length+' produto(s) com preço ou custo zerado: '+zp.slice(0,5).map(p=>esc(lbl(p))).join(', ')+(zp.length>5?' e mais '+(zp.length-5):'')+'.');
+  if(zv)l.push(zv+' venda(s) no período com preço R$ 0,00 (entraram sem receita).');
+  if(zk)l.push(zk+' venda(s) no período com custo zerado (lucro inflado).');
+  return '<div class="card warn"><b>Atenção: valores zerados</b>'+l.map(t=>'<div class="mut" style="margin-top:6px">'+t+'</div>').join('')+'<div class="mut" style="margin-top:6px">Corrija o cadastro em Produtos &gt; Editar.</div></div>';
+}
 function rSum(){
   const m=$('per').value,d0=new Date();d0.setHours(0,0,0,0);
   const back=n=>{const f=new Date(d0);f.setDate(f.getDate()-(n-1));return f.getTime()};
@@ -295,7 +305,7 @@ function rSum(){
   const r=a.reduce((s,v)=>s+v.pr*v.q,0),c=a.reduce((s,v)=>s+v.c*v.q,0),l=r-c;
   const est=S.p.reduce((s,p)=>s+p.c*p.q,0),un=S.p.reduce((s,p)=>s+p.q,0);
   const rec=S.c.reduce((s,c)=>s+Math.max(0,owe(c.id)),0);
-  $('sum').innerHTML=`<div class="grid2">
+  $('sum').innerHTML=zeroAlert(from)+`<div class="grid2">
 <div class="card"><div class="mut">Vendido no período</div><div class="big">${brl(r)}</div></div>
 <div class="card"><div class="mut">Recebido no período</div><div class="big">${brl(rcb)}</div></div>
 <div class="card"><div class="mut">Lucro das vendas</div><div class="big ${l<0?'bad':'ok'}">${brl(l)}</div></div>
@@ -316,7 +326,7 @@ function mg(){
   $('mg').textContent=(c>=0&&p>0)?`Lucro por peça: ${brl(p-c)} (${Math.round((p-c)/p*100)}% do preço)`:'';
 }
 function clearForm(){
-  edit=null;['n','t','q','c','pr'].forEach(i=>{$(i).value=''});
+  edit=null;zc=false;['n','t','q','c','pr'].forEach(i=>{$(i).value=''});
   $('ftitle').textContent='Novo produto';$('cancel').hidden=true;mg();
 }
 
@@ -326,12 +336,14 @@ $('save').onclick=()=>{
   if($('q').value.trim()===''&&!$('q').validity.badInput)return toast('Adicione uma quantidade de produtos para salvar o produto.');
   if(!(q>=0))return toast('Quantidade inválida. Use um número inteiro.');
   if(!(c>=0)||!(pr>=0))return toast('Informe o custo e o preço de venda.');
+  if(pr===0)return toast('O preço de venda não pode ser R$ 0,00.');
+  if(c===0&&!zc){zc=true;return toast('Custo R$ 0,00: o lucro vai aparecer inflado. Toque em Salvar de novo para confirmar.')}
   if(edit){const p=S.p.find(x=>x.id===edit);if(p){const dq=q-p.q;Object.assign(p,{n,t,q,c,pr});if(dq)mov('ajuste',lbl(p),dq,'edição do produto')}}
   else{S.p.push({id:uid(),n,t,q,c,pr});if(q>0)mov('cadastro',n+(t?' · '+t:''),q)}
-  save();clearForm();rList();toast('Produto salvo.');
+  zc=false;save();clearForm();rList();toast('Produto salvo.');
 };
 $('cancel').onclick=clearForm;
-$('c').oninput=mg;$('pr').oninput=mg;
+$('c').oninput=()=>{zc=false;mg()};$('pr').oninput=mg;
 $('sp').onchange=fillPrice;
 $('per').onchange=rSum;
 
@@ -340,7 +352,7 @@ $('sell').onclick=()=>{
   if(!p)return toast('Escolha uma peça.');
   if(!(q>=1))return toast('Quantidade inválida. Use um número inteiro maior que zero.');
   if(q>p.q)return toast('Só há '+p.q+' em estoque.');
-  if(!(v>=0))return toast('Preço inválido.');
+  if(!(v>0))return toast('Informe o preço de venda (maior que zero).');
   const cid=$('sc').value,fiado=$('sf').value==='1';
   if(fiado&&!cid)return toast('Escolha o cliente para vender fiado.');
   p.q-=q;mov('venda',lbl(p),-q,fiado?'fiado':'');
@@ -384,6 +396,8 @@ document.addEventListener('click',e=>{
     if(k>n)return toast('O cliente só tem '+n+' peça(s) em aberto.');
     const v=Math.min(valUnits(id,k),owe(id));
     S.r.push({id:uid(),cid:id,val:v,ts:Date.now()});save();rCli();toast(k+' peça(s) pagas: '+brl(v)+' abatidos.');
+  }else if(a==='ext'){
+    exo=exo===id?null:id;rCli();
   }else if(a==='cdel'){
     if(owe(id)>0.005)return toast('Este cliente ainda deve. Registre o pagamento antes de excluir.');
     if(del===id){S.c=S.c.filter(x=>x.id!==id);S.r=S.r.filter(x=>x.cid!==id);del=null;save();toast('Cliente excluído.')}else del=id;
@@ -466,10 +480,18 @@ function openSegs(id){
 }
 const nOpen=id=>openSegs(id).reduce((s,x)=>s+x.n,0);
 function valUnits(id,k){let t=0;for(const x of openSegs(id)){const m=Math.min(k,x.n);t+=m*x.val;k-=m;if(k<=0)break}return Math.round(t*100)/100}
+function extrato(c){
+  const vs=S.v.filter(v=>v.cid===c.id),rs=S.r.filter(r=>r.cid===c.id);
+  const comp=vs.reduce((s,v)=>s+v.pr*v.q,0),fia=vs.filter(v=>v.fiado).reduce((s,v)=>s+v.pr*v.q,0),hora=comp-fia,pag=rs.reduce((s,r)=>s+r.val,0),d=owe(c.id);
+  const dt=ts=>new Date(ts).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+  const L=[...vs.map(v=>({ts:v.ts,h:`<div class="line"><span>${dt(v.ts)} · ${nm(v)}<br><span class="mut">${v.q} un. × ${brl(v.pr)} · ${v.fiado?'fiado':'pago na hora'}</span></span><span>${brl(v.pr*v.q)}</span></div>`})),
+    ...rs.map(r=>({ts:r.ts,h:`<div class="line"><span>${dt(r.ts)} · Pagamento recebido</span><span class="ok">− ${brl(r.val)}</span></div>`}))].sort((a,b)=>b.ts-a.ts);
+  return `<div class="ex"><div class="grid2"><div><span class="mut">Comprou (total)</span><b>${brl(comp)}</b></div><div><span class="mut">Pagou (total)</span><b>${brl(hora+pag)}</b></div><div><span class="mut">Fiado</span><b>${brl(fia)}</b></div><div><span class="mut">${d>0.005?'Deve agora':'Saldo'}</span><b class="${d>0.005?'bad':'ok'}">${brl(Math.max(0,d))}</b></div></div>${L.length?L.map(x=>x.h).join(''):'<p class="mut">Nenhuma compra ou pagamento ainda.</p>'}</div>`;
+}
 function rCli(){
   const tot=S.c.reduce((s,c)=>s+Math.max(0,owe(c.id)),0);
   $('ctot').textContent=brl(tot);$('ctot').parentNode.classList.toggle('debt',tot>0.005);
-  $('clist').innerHTML=S.c.length?[...S.c].sort((a,b)=>Math.max(0,owe(b.id))-Math.max(0,owe(a.id))||a.n.localeCompare(b.n,'pt-BR')).map(c=>{const d=owe(c.id),dv=d>0.005;return `<div class="card${dv?' debt':''}"><div class="row between"><b>${esc(c.n)}</b><span class="pill ${dv?'bad':'ok'}">${dv?'Deve '+brl(d):'Em dia'}</span></div>${c.tel?`<div class="mut">${esc(c.tel)}</div>`:''}${dv?`<div class="mut">${nOpen(c.id)} peça(s) em aberto</div>`:''}<div class="row" style="margin-top:8px">${dv?`<input id="pay-${c.id}" inputmode="decimal" placeholder="Valor recebido" aria-label="Valor recebido" style="max-width:140px"><button class="s" data-a="pay" data-id="${c.id}">Registrar pagamento</button></div><div class="row" style="margin-top:8px"><input id="pu-${c.id}" inputmode="numeric" placeholder="Peças pagas" aria-label="Peças pagas" style="max-width:140px"><button class="s" data-a="payu" data-id="${c.id}">Pagar por peças</button></div><div class="row" style="margin-top:8px">`:''}${dv?(waUrl(c,d)?`<a class="lnk" href="${waUrl(c,d)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>`:`<input id="tel-${c.id}" inputmode="tel" maxlength="40" placeholder="Telefone com DDD" aria-label="Telefone" style="max-width:170px"><button class="s" data-a="stel" data-id="${c.id}">Salvar telefone</button>`):''}<button class="s" data-a="cdel" data-id="${c.id}">${del===c.id?'Confirmar exclusão':'Excluir'}</button></div></div>`}).join(''):'<p class="mut">Nenhum cliente cadastrado ainda.</p>';
+  $('clist').innerHTML=S.c.length?[...S.c].sort((a,b)=>Math.max(0,owe(b.id))-Math.max(0,owe(a.id))||a.n.localeCompare(b.n,'pt-BR')).map(c=>{const d=owe(c.id),dv=d>0.005;return `<div class="card${dv?' debt':''}"><div class="row between"><b>${esc(c.n)}</b><span class="pill ${dv?'bad':'ok'}">${dv?'Deve '+brl(d):'Em dia'}</span></div>${c.tel?`<div class="mut">${esc(c.tel)}</div>`:''}${dv?`<div class="mut">${nOpen(c.id)} peça(s) em aberto</div>`:''}<div class="row" style="margin-top:8px">${dv?`<input id="pay-${c.id}" inputmode="decimal" placeholder="Valor recebido" aria-label="Valor recebido" style="max-width:140px"><button class="s" data-a="pay" data-id="${c.id}">Registrar pagamento</button></div><div class="row" style="margin-top:8px"><input id="pu-${c.id}" inputmode="numeric" placeholder="Peças pagas" aria-label="Peças pagas" style="max-width:140px"><button class="s" data-a="payu" data-id="${c.id}">Pagar por peças</button></div><div class="row" style="margin-top:8px">`:''}${dv?(waUrl(c,d)?`<a class="lnk" href="${waUrl(c,d)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>`:`<input id="tel-${c.id}" inputmode="tel" maxlength="40" placeholder="Telefone com DDD" aria-label="Telefone" style="max-width:170px"><button class="s" data-a="stel" data-id="${c.id}">Salvar telefone</button>`):''}<button class="s" data-a="cdel" data-id="${c.id}">${del===c.id?'Confirmar exclusão':'Excluir'}</button><button class="s" data-a="ext" data-id="${c.id}">${exo===c.id?'Fechar extrato':'Ver extrato'}</button></div>${exo===c.id?extrato(c):''}</div>`}).join(''):'<p class="mut">Nenhum cliente cadastrado ainda.</p>';
 }
 $('csave').onclick=()=>{
   const n=$('cn').value.trim(),tel=$('ct').value.trim();
