@@ -185,7 +185,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 </details>
 </div>
 </section>
-<p class="ver">v1.9</p>
+<p class="ver">v2.0</p>
 </main>
 
 <div id="msg" role="status"></div>
@@ -200,7 +200,7 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;ba
 <script>
 const $=id=>document.getElementById(id);
 const KEY='meu_estoque_v1';
-let S={p:[],v:[],c:[],r:[],d:[],m:[]},edit=null,del=null,rest=false,tt,zc=false,exo=null;
+let S={p:[],v:[],c:[],r:[],d:[],m:[]},edit=null,del=null,rest=false,tt,zc=false,exo=null,ced=null,cur='prod',snap='';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const brl=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const num=s=>{s=String(s).trim();if(!s)return NaN;if(/^\d{1,3}(\.\d{3})+,\d+$/.test(s)||/^\d+,\d+$/.test(s))s=s.replace(/\./g,'').replace(',','.');else if(!/^\d+(\.\d+)?$/.test(s))return NaN;const n=Number(s);return n<1e9?Math.round(n*100)/100:NaN};
@@ -211,11 +211,23 @@ const nm=p=>esc(p.n)+(p.t?' · '+esc(p.t):'');
 const low=p=>p.q<=2;
 const lbl=x=>x.n+(x.t?' · '+x.t:'');
 function mov(t,n,q,o){S.m.unshift({id:uid(),ts:Date.now(),t,n,q,o:o||''});if(S.m.length>500)S.m.length=500}
+const rv=r=>r.est?-r.val:r.val;
+const act=()=>S.c.filter(c=>!c.arq);
+const hist=id=>S.v.some(v=>v.cid===id)||S.r.some(r=>r.cid===id);
 const cn=id=>(S.c.find(c=>c.id===id)||{n:'cliente removido'}).n;
-const owe=id=>S.v.filter(v=>v.cid===id&&v.fiado).reduce((s,v)=>s+v.pr*v.q,0)-S.r.filter(r=>r.cid===id).reduce((s,r)=>s+r.val,0);
+const owe=id=>S.v.filter(v=>v.cid===id&&v.fiado).reduce((s,v)=>s+v.pr*v.q,0)-S.r.filter(r=>r.cid===id).reduce((s,r)=>s+rv(r),0);
 function toast(m){const e=$('msg');e.textContent=m;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>{e.style.display='none'},3500)}
-function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d&&Array.isArray(d.p)&&Array.isArray(d.v))S=d}catch(e){}S.c=S.c||[];S.r=S.r||[];S.d=S.d||[];S.m=S.m||[]}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Não foi possível salvar neste navegador. Gere um backup.')}chk()}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'null');if(d&&Array.isArray(d.p)&&Array.isArray(d.v))S=d}catch(e){}S.c=S.c||[];S.r=S.r||[];S.d=S.d||[];S.m=S.m||[];snap=JSON.stringify(S)}
+function save(){
+  const s=JSON.stringify(S);
+  try{localStorage.setItem(KEY,s);snap=s;chk();return true}
+  catch(e){
+    try{S=JSON.parse(snap)}catch(_){}
+    tab(cur);chk();
+    toast('Não foi possível salvar neste aparelho. A última alteração foi desfeita. Faça um backup.');
+    return false;
+  }
+}
 function valid(d){
   const idok=x=>typeof x==='string'&&/^[a-z0-9]{1,40}$/i.test(x);
   const str=(x,m)=>typeof x==='string'&&x.length<=m,nome=x=>str(x,120)&&x.trim().length>0;
@@ -229,13 +241,14 @@ function valid(d){
   const K=new Set(C.map(x=>x.id));
   return d.p.every(p=>nome(p.n)&&opt(p.t,40)&&Number.isInteger(p.q)&&nn(p.q,1e7)&&nn(p.c,1e9)&&nn(p.pr,1e9))
     &&d.v.every(v=>nome(v.n)&&opt(v.t,40)&&Number.isInteger(v.q)&&v.q>=1&&v.q<=1e7&&nn(v.c,1e9)&&nn(v.pr,1e9)&&Number.isFinite(v.ts)&&v.ts>0&&(!v.pid||idok(v.pid))&&(!v.cid||idok(v.cid))&&(v.fiado===undefined||typeof v.fiado==='boolean')&&(!v.fiado||!!v.cid))
-    &&C.every(c=>nome(c.n)&&opt(c.tel,40))
-    &&R.every(r=>K.has(r.cid)&&nn(r.val,1e9)&&r.val>0&&Number.isFinite(r.ts))
+    &&C.every(c=>nome(c.n)&&opt(c.tel,40)&&(c.arq===undefined||typeof c.arq==='boolean'))
+    &&R.every(r=>K.has(r.cid)&&nn(r.val,1e9)&&r.val>0&&Number.isFinite(r.ts)&&(r.est===undefined||typeof r.est==='boolean'))
     &&D.every(x=>nome(x.n)&&nn(x.val,1e9)&&x.val>0&&Number.isFinite(x.ts))
-    &&M.every(x=>str(x.n,120)&&str(x.t,30)&&Number.isInteger(x.q)&&Number.isFinite(x.ts)&&opt(x.o,80));
+    &&M.every(x=>str(x.n,150)&&str(x.t,30)&&Number.isInteger(x.q)&&Number.isFinite(x.ts)&&opt(x.o,80));
 }
 
 function tab(n){
+  cur=n;ced=null;
   ['prod','est','sell','cli','sum'].forEach(k=>{$('t-'+k).hidden=k!==n;$('b-'+k).classList.toggle('on',k===n)});
   del=null;exo=null;
   if(n==='prod')rList();
@@ -277,7 +290,7 @@ function rEst(){
   $('emlist').innerHTML=movList();
 }
 function rSell(){
-  const s=$('sp'),cur=s.value,a=S.p.filter(p=>p.q>0);const sc=$('sc'),cc=sc.value;sc.innerHTML='<option value="">Sem cliente</option>'+S.c.map(c=>`<option value="${c.id}">${esc(c.n)}</option>`).join('');if(S.c.some(c=>c.id===cc))sc.value=cc;
+  const s=$('sp'),cur=s.value,a=S.p.filter(p=>p.q>0);const sc=$('sc'),cc=sc.value;sc.innerHTML='<option value="">Sem cliente</option>'+act().map(c=>`<option value="${c.id}">${esc(c.n)}</option>`).join('');if(S.c.some(c=>c.id===cc))sc.value=cc;
   s.innerHTML=a.length?a.map(p=>`<option value="${p.id}">${nm(p)} (${p.q} un.)</option>`).join(''):'<option value="">Nenhuma peça em estoque</option>';
   if(a.some(p=>p.id===cur))s.value=cur;
   fillPrice();
@@ -301,7 +314,7 @@ function rSum(){
   const m=$('per').value,d0=new Date();d0.setHours(0,0,0,0);
   const back=n=>{const f=new Date(d0);f.setDate(f.getDate()-(n-1));return f.getTime()};
   const from=m==='all'?0:m==='0'?d0.getTime():m==='m'?new Date(d0.getFullYear(),d0.getMonth(),1).getTime():back(m==='7'?7:30);
-  const a=S.v.filter(v=>v.ts>=from);const dd=S.d.filter(x=>x.ts>=from),dsp=dd.reduce((s,x)=>s+x.val,0);const rcb=a.filter(v=>!v.fiado).reduce((s,v)=>s+v.pr*v.q,0)+S.r.filter(x=>x.ts>=from).reduce((s,x)=>s+x.val,0);
+  const a=S.v.filter(v=>v.ts>=from);const dd=S.d.filter(x=>x.ts>=from),dsp=dd.reduce((s,x)=>s+x.val,0);const rcb=a.filter(v=>!v.fiado).reduce((s,v)=>s+v.pr*v.q,0)+S.r.filter(x=>x.ts>=from).reduce((s,x)=>s+rv(x),0);
   const r=a.reduce((s,v)=>s+v.pr*v.q,0),c=a.reduce((s,v)=>s+v.c*v.q,0),l=r-c;
   const est=S.p.reduce((s,p)=>s+p.c*p.q,0),un=S.p.reduce((s,p)=>s+p.q,0);
   const rec=S.c.reduce((s,c)=>s+Math.max(0,owe(c.id)),0);
@@ -340,7 +353,7 @@ $('save').onclick=()=>{
   if(c===0&&!zc){zc=true;return toast('Custo R$ 0,00: o lucro vai aparecer inflado. Toque em Salvar de novo para confirmar.')}
   if(edit){const p=S.p.find(x=>x.id===edit);if(p){const dq=q-p.q;Object.assign(p,{n,t,q,c,pr});if(dq)mov('ajuste',lbl(p),dq,'edição do produto')}}
   else{S.p.push({id:uid(),n,t,q,c,pr});if(q>0)mov('cadastro',n+(t?' · '+t:''),q)}
-  zc=false;save();clearForm();rList();toast('Produto salvo.');
+  zc=false;if(!save())return;clearForm();rList();toast('Produto salvo.');
 };
 $('cancel').onclick=clearForm;
 $('c').oninput=()=>{zc=false;mg()};$('pr').oninput=mg;
@@ -357,7 +370,7 @@ $('sell').onclick=()=>{
   if(fiado&&!cid)return toast('Escolha o cliente para vender fiado.');
   p.q-=q;mov('venda',lbl(p),-q,fiado?'fiado':'');
   S.v.unshift({id:uid(),pid:p.id,n:p.n,t:p.t,q,c:p.c,pr:v,ts:Date.now(),cid,fiado});
-  save();$('sq').value=1;$('sf').value='0';rSell();toast('Venda registrada. Lucro: '+brl((v-p.c)*q));
+  if(!save())return;$('sq').value=1;$('sf').value='0';rSell();toast('Venda registrada. Lucro: '+brl((v-p.c)*q));
 };
 
 document.addEventListener('click',e=>{
@@ -366,42 +379,55 @@ document.addEventListener('click',e=>{
   if(a==='add'&&p){
     const n=int($('in-'+id).value);
     if(!(n>=1))return toast('Informe quantas peças chegaram (número inteiro).');
-    p.q+=n;mov('entrada',lbl(p),n);save();rList();toast('Estoque atualizado.');
+    if(p.q+n>1e7)return toast('Limite de 10.000.000 unidades por peça.');
+    p.q+=n;mov('entrada',lbl(p),n);if(!save())return;rList();toast('Estoque atualizado.');
   }else if(a==='eadd'&&p){
     const n=int($('ei-'+id).value);
     if(!(n>=1))return toast('Informe quantas peças chegaram (número inteiro).');
-    p.q+=n;mov('entrada',lbl(p),n);save();rEst();toast('Estoque atualizado.');
+    if(p.q+n>1e7)return toast('Limite de 10.000.000 unidades por peça.');
+    p.q+=n;mov('entrada',lbl(p),n);if(!save())return;rEst();toast('Estoque atualizado.');
   }else if(a==='edit'&&p){
     edit=id;$('n').value=p.n;$('t').value=p.t||'';$('q').value=p.q;$('c').value=dec(p.c);$('pr').value=dec(p.pr);
     $('ftitle').textContent='Editar produto';$('cancel').hidden=false;mg();window.scrollTo({top:0,behavior:'smooth'});
   }else if(a==='del'&&p){
-    if(del===id){S.p=S.p.filter(x=>x.id!==id);del=null;save();toast('Produto excluído.')}else del=id;
+    if(del===id){S.p=S.p.filter(x=>x.id!==id);del=null;if(!save())return;toast('Produto excluído.')}else del=id;
     rList();
   }else if(a==='ddel'){
-    if(del===id){S.d=S.d.filter(x=>x.id!==id);del=null;save();toast('Despesa excluída.')}else del=id;
+    if(del===id){S.d=S.d.filter(x=>x.id!==id);del=null;if(!save())return;toast('Despesa excluída.')}else del=id;
     rSum();
   }else if(a==='stel'){
     const c=S.c.find(x=>x.id===id),t=$('tel-'+id).value.trim();
     if(!c)return;
     if(!tel55(t))return toast('Telefone inválido. Use o DDD e o número.');
-    c.tel=t;save();rCli();toast('Telefone salvo.');
+    c.tel=t;if(!save())return;rCli();toast('Telefone salvo.');
   }else if(a==='pay'){
     const v=num($('pay-'+id).value),d=owe(id);
     if(!(v>0))return toast('Informe o valor recebido.');
     if(v>d+0.005)return toast('Valor maior que o saldo de '+brl(d)+'.');
-    S.r.push({id:uid(),cid:id,val:v,ts:Date.now()});save();rCli();toast('Pagamento registrado.');
+    S.r.push({id:uid(),cid:id,val:v,ts:Date.now()});if(!save())return;rCli();toast('Pagamento registrado.');
   }else if(a==='payu'){
     const k=int($('pu-'+id).value),n=nOpen(id);
     if(!(k>=1))return toast('Informe quantas peças foram pagas (número inteiro).');
     if(k>n)return toast('O cliente só tem '+n+' peça(s) em aberto.');
     const v=Math.min(valUnits(id,k),owe(id));
-    S.r.push({id:uid(),cid:id,val:v,ts:Date.now()});save();rCli();toast(k+' peça(s) pagas: '+brl(v)+' abatidos.');
+    S.r.push({id:uid(),cid:id,val:v,ts:Date.now()});if(!save())return;rCli();toast(k+' peça(s) pagas: '+brl(v)+' abatidos.');
   }else if(a==='ext'){
     exo=exo===id?null:id;rCli();
   }else if(a==='cdel'){
     if(owe(id)>0.005)return toast('Este cliente ainda deve. Registre o pagamento antes de excluir.');
-    if(del===id){S.c=S.c.filter(x=>x.id!==id);S.r=S.r.filter(x=>x.cid!==id);del=null;save();toast('Cliente excluído.')}else del=id;
-    rCli();
+    const c=S.c.find(x=>x.id===id);if(!c)return;
+    if(hist(id)){c.arq=true;exo=null;ced=null;if(!save())return;rCli();toast('Cliente arquivado. O histórico foi mantido.')}
+    else{if(del===id){S.c=S.c.filter(x=>x.id!==id);del=null;if(!save())return;toast('Cliente excluído.')}else del=id;rCli()}
+  }else if(a==='creat'){
+    const c=S.c.find(x=>x.id===id);if(!c)return;c.arq=false;if(!save())return;rCli();toast('Cliente reativado.');
+  }else if(a==='cedit'){
+    ced=ced===id?null:id;rCli();
+  }else if(a==='csv'){
+    const c=S.c.find(x=>x.id===id),nn2=$('cen-'+id).value.trim(),tt2=$('cet-'+id).value.trim();
+    if(!c)return;
+    if(!nn2)return toast('Informe o nome do cliente.');
+    if(tt2&&!tel55(tt2))return toast('Telefone inválido. Use o DDD e o número.');
+    c.n=nn2;c.tel=tt2;ced=null;if(!save())return;rCli();toast('Dados do cliente salvos.');
   }else if(a==='undo'){
     const i=S.v.findIndex(x=>x.id===id);if(i<0)return;
     const v=S.v[i],q=S.p.find(x=>x.id===v.pid);
@@ -409,13 +435,9 @@ document.addEventListener('click',e=>{
     let ex=0;
     if(v.cid&&v.fiado){
       ex=-owe(v.cid);
-      if(ex>0.005){
-        let f=ex;
-        for(const r of S.r.filter(r=>r.cid===v.cid).sort((a,b)=>b.ts-a.ts)){if(f<=0.005)break;const t=Math.min(r.val,f);r.val-=t;f-=t}
-        S.r=S.r.filter(r=>r.val>0.005);
-      }
+      if(ex>0.005){ex=Math.round(ex*100)/100;S.r.push({id:uid(),cid:v.cid,val:ex,ts:Date.now(),est:true})}
     }
-    save();rSell();
+    if(!save())return;rSell();
     toast(ex>0.005?'Venda desfeita. Como já estava paga, '+brl(ex)+' saiu do saldo do cliente: devolva esse valor a ele.':'Venda desfeita e estoque devolvido.');
   }
 });
@@ -458,17 +480,17 @@ $('rs').onclick=()=>{
   if(!rest){rest=true;$('rs').textContent='Confirmar';return toast('Isso substitui os dados atuais. Toque de novo para confirmar.')}
   S={p:d.p.map(p=>({id:p.id,n:p.n,t:String(p.t||''),q:p.q,c:p.c,pr:p.pr})),
     v:d.v.map(v=>({id:v.id,pid:v.pid||'',n:v.n,t:String(v.t||''),q:v.q,c:v.c,pr:v.pr,ts:v.ts,cid:v.cid||'',fiado:!!v.fiado})),
-    c:(d.c||[]).map(c=>({id:c.id,n:c.n,tel:String(c.tel||'')})),
-    r:(d.r||[]).map(r=>({id:r.id,cid:r.cid,val:r.val,ts:r.ts})),
+    c:(d.c||[]).map(c=>({id:c.id,n:c.n,tel:String(c.tel||''),arq:!!c.arq})),
+    r:(d.r||[]).map(r=>({id:r.id,cid:r.cid,val:r.val,ts:r.ts,est:!!r.est})),
     d:(d.d||[]).map(x=>({id:x.id,n:x.n,val:x.val,ts:x.ts})),
     m:(d.m||[]).map(x=>({id:x.id,ts:x.ts,t:x.t,n:x.n,q:x.q,o:String(x.o||'')}))};
-  rest=false;$('rs').textContent='Restaurar';$('bf').value='';clearForm();del=null;save();rSum();toast('Backup restaurado.');
+  rest=false;$('rs').textContent='Restaurar';$('bf').value='';clearForm();del=null;if(!save())return;rSum();toast('Backup restaurado.');
 };
 
 function tel55(t){const n=String(t||'').replace(/\D/g,'');if(n.startsWith('55')&&n.length>=12&&n.length<=13)return n;return n.length>=10&&n.length<=11?'55'+n:''}
 function waUrl(c,d){const n=tel55(c.tel);return n?'https://wa.me/'+n+'?text='+encodeURIComponent('Olá, '+c.n.split(' ')[0]+'! Tudo bem? Passando para lembrar do valor pendente de '+brl(d)+' na Chris-Look’s. Qualquer dúvida, é só falar!'):''}
 function openSegs(id){
-  let paid=S.r.filter(r=>r.cid===id).reduce((s,r)=>s+r.val,0);const out=[];
+  let paid=S.r.filter(r=>r.cid===id).reduce((s,r)=>s+rv(r),0);const out=[];
   for(const v of S.v.filter(v=>v.cid===id&&v.fiado).sort((a,b)=>a.ts-b.ts)){
     if(!(v.pr>0.005))continue;
     const full=Math.min(v.q,Math.floor((paid+0.005)/v.pr));paid=Math.max(0,paid-full*v.pr);
@@ -480,23 +502,30 @@ function openSegs(id){
 }
 const nOpen=id=>openSegs(id).reduce((s,x)=>s+x.n,0);
 function valUnits(id,k){let t=0;for(const x of openSegs(id)){const m=Math.min(k,x.n);t+=m*x.val;k-=m;if(k<=0)break}return Math.round(t*100)/100}
+function cform(c){
+  return `<div class="ex"><label for="cen-${c.id}" style="margin-top:0">Nome</label><input id="cen-${c.id}" maxlength="100" value="${esc(c.n)}" autocomplete="off"><label for="cet-${c.id}">Telefone (opcional)</label><input id="cet-${c.id}" maxlength="40" inputmode="tel" value="${esc(c.tel||'')}" placeholder="(00) 00000-0000"><button class="p full" data-a="csv" data-id="${c.id}">Salvar dados</button></div>`;
+}
+function arqHtml(){
+  const a=S.c.filter(c=>c.arq);if(!a.length)return '';
+  return `<details style="margin-top:6px"><summary class="mut">Arquivados (${a.length})</summary>${a.map(c=>`<div class="card row between"><span>${esc(c.n)}</span><button class="s" data-a="creat" data-id="${c.id}">Reativar</button></div>`).join('')}</details>`;
+}
 function extrato(c){
   const vs=S.v.filter(v=>v.cid===c.id),rs=S.r.filter(r=>r.cid===c.id);
-  const comp=vs.reduce((s,v)=>s+v.pr*v.q,0),fia=vs.filter(v=>v.fiado).reduce((s,v)=>s+v.pr*v.q,0),hora=comp-fia,pag=rs.reduce((s,r)=>s+r.val,0),d=owe(c.id);
+  const comp=vs.reduce((s,v)=>s+v.pr*v.q,0),fia=vs.filter(v=>v.fiado).reduce((s,v)=>s+v.pr*v.q,0),hora=comp-fia,pag=rs.reduce((s,r)=>s+rv(r),0),d=owe(c.id);
   const dt=ts=>new Date(ts).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'});
   const L=[...vs.map(v=>({ts:v.ts,h:`<div class="line"><span>${dt(v.ts)} · ${nm(v)}<br><span class="mut">${v.q} un. × ${brl(v.pr)} · ${v.fiado?'fiado':'pago na hora'}</span></span><span>${brl(v.pr*v.q)}</span></div>`})),
-    ...rs.map(r=>({ts:r.ts,h:`<div class="line"><span>${dt(r.ts)} · Pagamento recebido</span><span class="ok">− ${brl(r.val)}</span></div>`}))].sort((a,b)=>b.ts-a.ts);
+    ...rs.map(r=>({ts:r.ts,h:r.est?`<div class="line"><span>${dt(r.ts)} · Estorno devolvido ao cliente</span><span class="bad">+ ${brl(r.val)}</span></div>`:`<div class="line"><span>${dt(r.ts)} · Pagamento recebido</span><span class="ok">− ${brl(r.val)}</span></div>`}))].sort((a,b)=>b.ts-a.ts);
   return `<div class="ex"><div class="grid2"><div><span class="mut">Comprou (total)</span><b>${brl(comp)}</b></div><div><span class="mut">Pagou (total)</span><b>${brl(hora+pag)}</b></div><div><span class="mut">Fiado</span><b>${brl(fia)}</b></div><div><span class="mut">${d>0.005?'Deve agora':'Saldo'}</span><b class="${d>0.005?'bad':'ok'}">${brl(Math.max(0,d))}</b></div></div>${L.length?L.map(x=>x.h).join(''):'<p class="mut">Nenhuma compra ou pagamento ainda.</p>'}</div>`;
 }
 function rCli(){
   const tot=S.c.reduce((s,c)=>s+Math.max(0,owe(c.id)),0);
   $('ctot').textContent=brl(tot);$('ctot').parentNode.classList.toggle('debt',tot>0.005);
-  $('clist').innerHTML=S.c.length?[...S.c].sort((a,b)=>Math.max(0,owe(b.id))-Math.max(0,owe(a.id))||a.n.localeCompare(b.n,'pt-BR')).map(c=>{const d=owe(c.id),dv=d>0.005;return `<div class="card${dv?' debt':''}"><div class="row between"><b>${esc(c.n)}</b><span class="pill ${dv?'bad':'ok'}">${dv?'Deve '+brl(d):'Em dia'}</span></div>${c.tel?`<div class="mut">${esc(c.tel)}</div>`:''}${dv?`<div class="mut">${nOpen(c.id)} peça(s) em aberto</div>`:''}<div class="row" style="margin-top:8px">${dv?`<input id="pay-${c.id}" inputmode="decimal" placeholder="Valor recebido" aria-label="Valor recebido" style="max-width:140px"><button class="s" data-a="pay" data-id="${c.id}">Registrar pagamento</button></div><div class="row" style="margin-top:8px"><input id="pu-${c.id}" inputmode="numeric" placeholder="Peças pagas" aria-label="Peças pagas" style="max-width:140px"><button class="s" data-a="payu" data-id="${c.id}">Pagar por peças</button></div><div class="row" style="margin-top:8px">`:''}${dv?(waUrl(c,d)?`<a class="lnk" href="${waUrl(c,d)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>`:`<input id="tel-${c.id}" inputmode="tel" maxlength="40" placeholder="Telefone com DDD" aria-label="Telefone" style="max-width:170px"><button class="s" data-a="stel" data-id="${c.id}">Salvar telefone</button>`):''}<button class="s" data-a="cdel" data-id="${c.id}">${del===c.id?'Confirmar exclusão':'Excluir'}</button><button class="s" data-a="ext" data-id="${c.id}">${exo===c.id?'Fechar extrato':'Ver extrato'}</button></div>${exo===c.id?extrato(c):''}</div>`}).join(''):'<p class="mut">Nenhum cliente cadastrado ainda.</p>';
+  $('clist').innerHTML=(act().length?[...act()].sort((a,b)=>Math.max(0,owe(b.id))-Math.max(0,owe(a.id))||a.n.localeCompare(b.n,'pt-BR')).map(c=>{const d=owe(c.id),dv=d>0.005;return `<div class="card${dv?' debt':''}"><div class="row between"><b>${esc(c.n)}</b><span class="pill ${dv?'bad':'ok'}">${dv?'Deve '+brl(d):'Em dia'}</span></div>${c.tel?`<div class="mut">${esc(c.tel)}</div>`:''}${dv?`<div class="mut">${nOpen(c.id)} peça(s) em aberto</div>`:''}<div class="row" style="margin-top:8px">${dv?`<input id="pay-${c.id}" inputmode="decimal" placeholder="Valor recebido" aria-label="Valor recebido" style="max-width:140px"><button class="s" data-a="pay" data-id="${c.id}">Registrar pagamento</button></div><div class="row" style="margin-top:8px"><input id="pu-${c.id}" inputmode="numeric" placeholder="Peças pagas" aria-label="Peças pagas" style="max-width:140px"><button class="s" data-a="payu" data-id="${c.id}">Pagar por peças</button></div><div class="row" style="margin-top:8px">`:''}${dv?(waUrl(c,d)?`<a class="lnk" href="${waUrl(c,d)}" target="_blank" rel="noopener">Cobrar no WhatsApp</a>`:`<input id="tel-${c.id}" inputmode="tel" maxlength="40" placeholder="Telefone com DDD" aria-label="Telefone" style="max-width:170px"><button class="s" data-a="stel" data-id="${c.id}">Salvar telefone</button>`):''}<button class="s" data-a="cdel" data-id="${c.id}">${hist(c.id)?'Arquivar':(del===c.id?'Confirmar exclusão':'Excluir')}</button><button class="s" data-a="cedit" data-id="${c.id}">${ced===c.id?'Cancelar edição':'Editar dados'}</button><button class="s" data-a="ext" data-id="${c.id}">${exo===c.id?'Fechar extrato':'Ver extrato'}</button></div>${ced===c.id?cform(c):''}${exo===c.id?extrato(c):''}</div>`}).join(''):'<p class="mut">Nenhum cliente cadastrado ainda.</p>')+arqHtml();
 }
 $('csave').onclick=()=>{
   const n=$('cn').value.trim(),tel=$('ct').value.trim();
   if(!n)return toast('Informe o nome do cliente.');
-  S.c.push({id:uid(),n,tel});save();$('cn').value='';$('ct').value='';rCli();toast('Cliente salvo.');
+  S.c.push({id:uid(),n,tel});if(!save())return;$('cn').value='';$('ct').value='';rCli();toast('Cliente salvo.');
 };
 const BK='meu_estoque_bk',HK='meu_estoque_hint';
 function lastBk(){try{return Number(localStorage.getItem(BK))||0}catch(e){return 0}}
@@ -521,7 +550,7 @@ $('dsave').onclick=()=>{
   const n=$('dn').value.trim(),v=num($('dv').value);
   if(!n)return toast('Informe a descrição da despesa.');
   if(!(v>0))return toast('Informe o valor da despesa.');
-  S.d.push({id:uid(),n,val:v,ts:Date.now()});save();$('dn').value='';$('dv').value='';rSum();toast('Despesa registrada.');
+  S.d.push({id:uid(),n,val:v,ts:Date.now()});if(!save())return;$('dn').value='';$('dv').value='';rSum();toast('Despesa registrada.');
 };
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 load();tab('prod');chk();showHint();
